@@ -15,13 +15,22 @@ import {
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UploadButton, UploadDropzone } from "@/utils/uploadthings";
 import { toast } from "sonner";
 import Image from "next/image";
 import { Button } from "../ui/button";
-import { Loader2, XCircle } from "lucide-react";
-import axios from 'axios'
+import { Loader2, PencilLine, XCircle } from "lucide-react";
+import axios from "axios";
+import useLocation from "@/hooks/useLocation";
+import { ICity, IState } from "country-state-city";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface AddHotelFormProps {
   hotel: HotelWithRooms | null;
@@ -62,10 +71,15 @@ const formSchema = z.object({
 const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
   const [image, setImage] = useState<string | undefined>(hotel?.image);
   const [imageIsDeleting, setImageDeleting] = useState(false);
+  const [states, setStates] = useState<IState[]>([]);
+  const [cities, setCities] = useState<ICity[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const { getAllCountries, getCountryStates, getStateCities } = useLocation();
+  const countries = getAllCountries();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    defaultValues: hotel || {
       title: "",
       description: "",
       image: "",
@@ -88,36 +102,84 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
     },
   });
 
+  useEffect(()=>{
+    if(typeof image === 'string'){
+      form.setValue('image', image, {
+        shouldDirty: true,
+        shouldValidate: true,
+        shouldTouch: true
+      })
+    }
+  }, [image])
+
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "country") {
+        const selectedCountry = value.country;
+        if (selectedCountry) {
+          const countryStates = getCountryStates(selectedCountry);
+          setStates(countryStates);
+        } else {
+          setStates([]); // Reset if no country is selected
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [form.watch]); // Depend only on form.watch
+
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "country" || name === "state") {
+        const selectedCountry = value.country;
+        const selectedState = value.state;
+
+        if (selectedCountry && selectedState) {
+          const stateCities = getStateCities(selectedCountry, selectedState);
+          setCities(stateCities);
+        } else {
+          setCities([]); // Reset if no country or state is selected
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [form.watch]);
+
   function onSubmit(values: z.infer<typeof formSchema>) {
     // Do something with the form values.
     // ✅ This will be type-safe and validated.
     console.log(values);
   }
 
-  const handleImageDelete = (image:string) =>{
+  const handleImageDelete = (image: string) => {
     setImageDeleting(true);
-    const imageKey = image.substring(image.lastIndexOf('/') + 1)
-    axios.post('/api/uploadthing/delete', {imageKey}).then((res)=>{
-      if(res.data.success){
-        setImage('');
-        toast.success("Image Deleted successfully", {
+    const imageKey = image.substring(image.lastIndexOf("/") + 1);
+    axios
+      .post("/api/uploadthing/delete", { imageKey })
+      .then((res) => {
+        if (res.data.success) {
+          setImage("");
+          toast.success("Image Deleted successfully", {
+            style: {
+              background: "#4CAF50",
+              color: "white",
+            },
+          });
+        }
+      })
+      .catch((error) => {
+        toast.error(`Upload failed! ${error.message}`, {
           style: {
-            background: "#4CAF50",
+            background: "#FF4C4C",
             color: "white",
           },
         });
-      }
-    }).catch((error)=>{
-      toast.error(`Upload failed! ${error.message}`, {
-        style: {
-          background: "#FF4C4C",
-          color: "white",
-        },
+      })
+      .finally(() => {
+        setImageDeleting(false);
       });
-    }).finally(() => {
-      setImageDeleting(false);
-    });
-  }
+  };
 
   return (
     <div>
@@ -381,8 +443,10 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
                             alt="hotel image"
                             className="object-contain"
                           />
-                          <Button type="button" size={'icon'} 
-                            variant={'ghost'}
+                          <Button
+                            type="button"
+                            size={"icon"}
+                            variant={"ghost"}
                             className="absolute right-[-12px] top-0 cursor-pointer"
                             onClick={() => handleImageDelete(image)}
                           >
@@ -444,7 +508,146 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
                 )}
               />
             </div>
-            <div className="flex-1 flex flex-col gap-6">Part 2</div>
+            <div className="flex-1 flex flex-col gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="country"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Select Country</FormLabel>
+                      <FormDescription>
+                        In Which country is your property located
+                      </FormDescription>
+                      <Select
+                        disabled={isLoading}
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        defaultValue={field.value}
+                      >
+                        <SelectTrigger className="bg-background w-full">
+                          <SelectValue
+                            defaultValue={field.value}
+                            placeholder="Select a Country"
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {countries.map((country) => {
+                            return (
+                              <SelectItem
+                                key={country.isoCode}
+                                value={country.isoCode}
+                              >
+                                {country.name}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="state"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Select State</FormLabel>
+                      <FormDescription>
+                        In Which State is your property located
+                      </FormDescription>
+                      <Select
+                        disabled={isLoading || states.length < 1}
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        defaultValue={field.value}
+                      >
+                        <SelectTrigger className="bg-background w-full">
+                          <SelectValue
+                            defaultValue={field.value}
+                            placeholder="Select a State "
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {states.map((state) => {
+                            return (
+                              <SelectItem
+                                key={state.isoCode}
+                                value={state.isoCode}
+                              >
+                                {state.name}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Select City</FormLabel>
+                    <FormDescription>
+                      In Which City is your property located
+                    </FormDescription>
+                    <Select
+                      disabled={isLoading || cities.length < 1}
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      defaultValue={field.value}
+                    >
+                      <SelectTrigger className="bg-background w-full">
+                        <SelectValue
+                          defaultValue={field.value}
+                          placeholder="Select a City "
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cities.map((city) => {
+                          return (
+                            <SelectItem key={city.name} value={city.name}>
+                              {city.name}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="locationDescription"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Location Description</FormLabel>
+                    <FormDescription>
+                      Provide a detailed location description of your hotel
+                    </FormDescription>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Location at the very end of the beach road!"
+                        {...field}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-between gap-2 flex-wrap">
+                {hotel ? 
+                <Button className="max-w-[150px]" disabled={isLoading}>
+                  {isLoading ? <><Loader2 className="mr-2 h-4 w-4"/>Updating</> : <><PencilLine className="mr-2 h-4 w-4"/> Update</>}
+                </Button> : 
+                <Button className="max-w-[150px]" disabled={isLoading}>
+                  {isLoading ? <><Loader2 className="mr-2 h-4 w-4"/>Creating</> : <><PencilLine className="mr-2 h-4 w-4"/> Create Hotel</>}
+                </Button>}
+              </div>
+            </div>
           </div>
         </form>
       </Form>
