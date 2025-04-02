@@ -12,6 +12,7 @@ export const ourFileRouter = {
     },
   })
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .middleware(async ({ req }) => {
       const {userId} = await auth()
       if (!userId) throw new UploadThingError("Unauthorized");

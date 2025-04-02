@@ -20,7 +20,7 @@ import { UploadButton, UploadDropzone } from "@/utils/uploadthings";
 import { toast } from "sonner";
 import Image from "next/image";
 import { Button } from "../ui/button";
-import { Loader2, PencilLine, XCircle } from "lucide-react";
+import { Eye, Loader2, PencilLine, PlusIcon, Terminal, Trash, XCircle } from "lucide-react";
 import axios from "axios";
 import useLocation from "@/hooks/useLocation";
 import { ICity, IState } from "country-state-city";
@@ -31,6 +31,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRouter } from "next/navigation";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  // DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import AddRooms from "../room/AddRooms";
+
 
 interface AddHotelFormProps {
   hotel: HotelWithRooms | null;
@@ -71,11 +84,14 @@ const formSchema = z.object({
 const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
   const [image, setImage] = useState<string | undefined>(hotel?.image);
   const [imageIsDeleting, setImageDeleting] = useState(false);
+  const [IsHotelDeleting, setIsHotelDeleting] = useState(false);
+  const [open, setOpen] = useState(false);
   const [states, setStates] = useState<IState[]>([]);
   const [cities, setCities] = useState<ICity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const { getAllCountries, getCountryStates, getStateCities } = useLocation();
   const countries = getAllCountries();
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -110,6 +126,7 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
         shouldTouch: true
       })
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image])
 
   useEffect(() => {
@@ -126,6 +143,7 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
     });
 
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.watch]); // Depend only on form.watch
 
   useEffect(() => {
@@ -144,12 +162,84 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
     });
 
     return () => subscription.unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.watch]);
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    // Do something with the form values.
-    // ✅ This will be type-safe and validated.
-    console.log(values);
+    setIsLoading(true);
+    if(hotel){
+      axios.patch(`/api/hotel/${hotel.id}`, values).then((res)=>{
+        toast.success("🎉 Hotel updated", {
+          style: {
+            background: "#4CAF50",
+            color: "white",
+          },
+        });
+        router.push(`/hotel/${res.data.data.id}`)
+        setIsLoading(false)
+      }).catch((err)=>{
+        console.log(err)
+        toast.error(
+          "Something went wrong", {
+            style: {
+              background: "#FF0000",
+              color: "white",
+            }
+          }
+        )
+        setIsLoading(false)
+      })
+    } else{
+      axios.post('/api/hotel', values).then((res)=>{
+        toast.success("🎉 Hotel created", {
+          style: {
+            background: "#4CAF50",
+            color: "white",
+          },
+        });
+        router.push(`/hotel/${res.data.data.id}`)
+        setIsLoading(false)
+      }).catch((err)=>{
+        console.log(err)
+        toast.error(
+          "Something went wrong", {
+            style: {
+              background: "#FF0000",
+              color: "white",
+            }
+          }
+        )
+        setIsLoading(false)
+      })
+    }                                  
+  }
+
+  const handleDeleteHotel = async (hotel: HotelWithRooms)=>{
+    setIsHotelDeleting(true);
+    const getImageKey = (src: string)=>src.substring(src.lastIndexOf('/') + 1)
+
+    try {
+      const imageKey = getImageKey(hotel.image)
+      await axios.post('/api/uploadthing/delete', {imageKey})
+      await axios.delete(`/api/hotel/${hotel.id}`)
+      toast.success("Hotel deleted", {
+        style: {
+          background: "#4CAF50",
+          color: "white",
+        }
+      })
+      setIsHotelDeleting(false)
+      router.push(`/hotel/new`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (error: any) {
+      toast.error(`Hotel deletion could not be completed! ${error.message}`, {
+        style: {
+          background: "#FF4C4C",
+          color: "white",
+        },
+      });
+      setIsHotelDeleting(false)
+    }
   }
 
   const handleImageDelete = (image: string) => {
@@ -180,6 +270,10 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
         setImageDeleting(false);
       });
   };
+
+  const handleDialogueOpen = ()=>{
+    setOpen(prev=> !prev)
+  }
 
   return (
     <div>
@@ -637,13 +731,47 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
                   </FormItem>
                 )}
               />
-
+              {hotel && !hotel.rooms.length && <Alert className="bg-indigo-600 text-white">
+                <Terminal className="h-4 w-4 stroke-white" />
+                <AlertTitle>One last step!</AlertTitle>
+                <AlertDescription className="text-white">
+                  Your hotel was created successfully
+                  <div>Please add some rooms to complete your hotel setup</div>
+                </AlertDescription>
+              </Alert>}
               <div className="flex justify-between gap-2 flex-wrap">
+                {/* Delete */}
+                 {hotel && <Button onClick={()=> handleDeleteHotel(hotel)} variant='ghost' type="button" className="max-w-[150px] cursor-pointer" disabled={IsHotelDeleting || isLoading}>
+                    {IsHotelDeleting ? <><Loader2 className="mr-2 h-4 w-4"/> Deleting</> : <><Trash className="mr-2 h-4 w-4"/> Delete</>}
+                  </Button>}
+
+                {hotel && <Button onClick={()=>router.push(`/hotel-details/${hotel.id}`)} variant='ghost' type="button">
+                    <Eye className="mr-2 h-4 w-4"/> View
+                </Button>}
+
+                {hotel && <Dialog open={open} onOpenChange={setOpen}>
+                  <DialogTrigger className="cursor-pointer ">
+                    <div className="flex align-items-center justify-content-center">
+                      <PlusIcon className="mr-2 h-4 w-4"/> Add Room
+                    </div>
+                  </DialogTrigger>
+                  <DialogContent className="!max-w-[900px] !w-[90%]">
+                    <DialogHeader className="px-2">
+                      <DialogTitle>Add Rooms</DialogTitle>
+                      <DialogDescription>
+                        Add details about a room in your hotel.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <AddRooms hotel={hotel} handleDialogueOpen={handleDialogueOpen}/>
+                  </DialogContent>
+                </Dialog>}
+
+                {/* Update and Create */}
                 {hotel ? 
-                <Button className="max-w-[150px]" disabled={isLoading}>
+                <Button className="max-w-[150px] cursor-pointer" disabled={isLoading}>
                   {isLoading ? <><Loader2 className="mr-2 h-4 w-4"/>Updating</> : <><PencilLine className="mr-2 h-4 w-4"/> Update</>}
                 </Button> : 
-                <Button className="max-w-[150px]" disabled={isLoading}>
+                <Button className="max-w-[150px] cursor-pointer" disabled={isLoading}>
                   {isLoading ? <><Loader2 className="mr-2 h-4 w-4"/>Creating</> : <><PencilLine className="mr-2 h-4 w-4"/> Create Hotel</>}
                 </Button>}
               </div>
