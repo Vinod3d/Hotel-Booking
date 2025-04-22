@@ -48,8 +48,8 @@ model Room {
   kingBed             Int @default(0)
   queenBed            Int @default(0)
   image               String
-  breakfastPrice      Int
-  roomPrice           Int
+  breakfastPrice      Int @default(0)
+  roomPrice           Int @default(0)
   roomService         Boolean @default(false)
   TV                  Boolean @default(false)
   balcony             Boolean @default(false)

@@ -16,12 +16,13 @@ import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
 import { Checkbox } from "../ui/checkbox";
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { Loader2, XCircle } from "lucide-react";
+import { Loader2, PencilLine, XCircle } from "lucide-react";
 import { Button } from "../ui/button";
 import { UploadButton, UploadDropzone } from "@/utils/uploadthings";
+import { useRouter } from "next/navigation";
 
 interface AddRoomFormProps {
   hotel?: Hotel & {
@@ -38,16 +39,16 @@ const formSchema = z.object({
   description: z.string().min(10, {
     message: "Description must be at least 10 characters long",
   }),
-  bedCount: z.number().min(1, { message: "Bed count is required" }),
-  guestCount: z.number().min(1, { message: "Guest count is required" }),
-  bathroomCount: z.number().min(1, { message: "Bathroom count is required" }),
-  kingBed: z.number().min(0),
-  queenBed: z.number().min(0),
+  bedCount: z.coerce.number().min(1, { message: "Bed count is required" }),
+  guestCount: z.coerce.number().min(1, { message: "Guest count is required" }),
+  bathroomCount: z.coerce.number().min(1, { message: "Bathroom count is required" }),
+  kingBed: z.coerce.number().min(0),
+  queenBed: z.coerce.number().min(0),
   image: z.string().min(1, {
     message: "Image is required",
   }),
-  breakfastPrice: z.number().optional(),
-  roomPrice: z.number().min(1, {
+  breakfastPrice: z.coerce.number().optional(),
+  roomPrice: z.coerce.number().min(1, {
     message: "Room price is required",
   }),
   roomService: z.boolean().optional(),
@@ -62,13 +63,16 @@ const formSchema = z.object({
   soundProofed: z.boolean().optional(),
 });
 
+
 export const AddRooms = ({
   hotel,
   room,
   handleDialogueOpen,
 }: AddRoomFormProps) => {
-  const [image, setImage] = useState<string | undefined>(hotel?.image);
+  const [image, setImage] = useState<string | undefined>(room?.image);
   const [imageIsDeleting, setImageDeleting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -95,6 +99,17 @@ export const AddRooms = ({
       soundProofed: false,
     },
   });
+
+  useEffect(() => {
+    if (typeof image === "string") {
+      form.setValue("image", image, {
+        shouldDirty: true,
+        shouldValidate: true,
+        shouldTouch: true,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image]);
 
   const handleImageDelete = (image: string) => {
     setImageDeleting(true);
@@ -124,6 +139,60 @@ export const AddRooms = ({
         setImageDeleting(false);
       });
   };
+
+  function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsLoading(true);
+    if (hotel && room) {
+      axios
+        .patch(`/api/room/${room.id}`, values)
+        .then(() => {
+          toast.success("🎉 room updated", {
+            style: {
+              background: "#4CAF50",
+              color: "white",
+            },
+          });
+          router.refresh();
+          setIsLoading(false);
+          handleDialogueOpen();
+        })
+        .catch((err) => {
+          console.log(err);
+          toast.error("Something went wrong", {
+            style: {
+              background: "#FF0000",
+              color: "white",
+            },
+          });
+          setIsLoading(false);
+        });
+    } else {
+      if (!hotel) return;
+      axios
+        .post("/api/room", { ...values, hotelId: hotel.id })
+        .then(() => {
+          toast.success("🎉 Room created", {
+            style: {
+              background: "#4CAF50",
+              color: "white",
+            },
+          });
+          router.refresh();
+          setIsLoading(false);
+          handleDialogueOpen();
+        })
+        .catch((err) => {
+          console.log(err);
+          toast.error("Something went wrong", {
+            style: {
+              background: "#FF0000",
+              color: "white",
+            },
+          });
+          setIsLoading(false);
+        });
+    }
+  }
 
   return (
     <div className="max-h-[75vh] overflow-y-auto px-2">
@@ -408,20 +477,158 @@ export const AddRooms = ({
           <div className="flex flex-row gap-6">
             <div className="flex-1 flex flex-col gap-6">
               <FormField
-                  control={form.control}
-                  name="roomPrice"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Room Price in USD</FormLabel>
-                      <FormDescription>State the price for staying in this room for 24hrs. </FormDescription>
-                      <FormControl>
-                        <Input type="number" min={0} {...field}/>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                control={form.control}
+                name="roomPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Room Price in USD</FormLabel>
+                    <FormDescription>
+                      State the price for staying in this room for 24hrs.{" "}
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bedCount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bed Count</FormLabel>
+                    <FormDescription>
+                      How many beds are available in this room.{" "}
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} max={8} {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="guestCount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Guest Count</FormLabel>
+                    <FormDescription>
+                      How many guests are available in this room.
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} max={20} {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="bathroomCount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bathroom Count</FormLabel>
+                    <FormDescription>
+                      How many bathrooms are in this room.
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} max={20} {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
             </div>
-            <div className="flex-1 flex flex-col gap-6">Part 2</div>
+            <div className="flex-1 flex flex-col gap-6">
+              <FormField
+                control={form.control}
+                name="breakfastPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Breakfast Price in USD</FormLabel>
+                    <FormDescription>
+                      What is the price for breakfast.{" "}
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="kingBed"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>King Bed</FormLabel>
+                    <FormDescription>
+                      How many king beds are available in this room.{" "}
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} max={8} {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="queenBed"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel> Queen Beds</FormLabel>
+                    <FormDescription>
+                      How many queen beds are available in this room.
+                    </FormDescription>
+                    <FormControl>
+                      <Input type="number" min={0} max={20} {...field} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+          <div>
+            {room ? (
+              <Button
+                onClick={form.handleSubmit(onSubmit)}
+                type="button"
+                className="max-w-[150px] cursor-pointer"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4" />
+                    Updating
+                  </>
+                ) : (
+                  <>
+                    <PencilLine className="mr-2 h-4 w-4" /> Update
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={form.handleSubmit(onSubmit)}
+                type="button"
+                className="max-w-[150px] cursor-pointer"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4" />
+                    Creating
+                  </>
+                ) : (
+                  <>
+                    <PencilLine className="mr-2 h-4 w-4" /> Create Room
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </form>
       </Form>

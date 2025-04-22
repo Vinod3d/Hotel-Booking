@@ -43,6 +43,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {AddRooms} from "../room/AddRooms";
+import RoomCard from "../room/RoomCard";
+import { Separator } from "../ui/separator";
 
 
 interface AddHotelFormProps {
@@ -775,6 +777,15 @@ const AddHotelForm = ({ hotel }: AddHotelFormProps) => {
                   {isLoading ? <><Loader2 className="mr-2 h-4 w-4"/>Creating</> : <><PencilLine className="mr-2 h-4 w-4"/> Create Hotel</>}
                 </Button>}
               </div>
+              {hotel && !!hotel.rooms.length && <div>
+                <Separator className="my-4" />
+                  <h3 className="text-lg font-semibold my-4">Hotel Rooms</h3>
+                  <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6">
+                    {hotel.rooms.map((room) => {
+                      return <RoomCard key={room.id} room={room} hotel={hotel} />;
+                    })}
+                  </div>
+                </div>}
             </div>
           </div>
         </form>
